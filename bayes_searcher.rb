@@ -3,30 +3,43 @@ module BayesSearcher
     attr_reader :data
     require 'open-uri'
     def initialize url, collector
+      @visited = []
       @links = Queue.new
       @data = []
       @url = url
       @collector = collector
     end
 
-    def run
-      open(@url) do |root|
-        data, links = @collector.kollect root.read
-        @data << data
-        links.each { |l| @links << l }
+    def kollector_collect(page)
+      @collector.kollect(page.read)
+    end
+
+    def collect_links(links_titles)
+      links_titles.each do |link, title|
+        if !@visited.include?(link) || @collector.navigator.run(title) == :good
+          @links << link
+        end
       end
+    end
+
+    def parse_page(link)
+      open(link) do |page|
+        data, links_titles = kollector_collect(page)
+        @data << data
+        collect_links(links_titles)
+        @visited << link
+      end
+    end
+
+    def run
+      parse_page(@url)
       threads = []
 
       2.times do
         threads << Thread.new do
-          while !@links.empty? && @links.size < 20
+          while !@links.empty? && @links.size < 80
             link = @links.pop
-            open(link) do |page|
-              data, links = @collector.kollect page.read
-              @data << data
-              links.each { |l| @links << l }
-              @collector.save
-            end
+            parse_page(link)
           end
         end
       end
@@ -35,9 +48,9 @@ module BayesSearcher
   end
 
     class Kollector
+      attr_accessor :extractor, :navigator
       require 'nokogiri'
       def initialize klassifiers, **args
-        @known = []
         @css_selectors = args[:selectors]
         @extractor = klassifiers[:extractor]
         @navigator = klassifiers[:navigator]
@@ -50,33 +63,24 @@ module BayesSearcher
 
       def save
         puts 'saving...'
-        @extractor.save_state
-        @navigator.save_state
+        @extractor.klassifier.save_state
+        @navigator.klassifier.save_state
       end
         
+      #get rid of
       def data
-        classify_data
-      end
-
-      def links
-        classify_links
-      end
-
-      def classify_data
         :bob 
       end
 
-      def classify_links
-        good_links = []
-        extracted_links.each do |link, title|
-          puts link
-          puts @known.include?(link)
-          if !@known.include?(link) && @navigator.run(title) == :good
-            good_links << link
-          end
-          @known << link
-        end
-        good_links
+      def links
+        #good_links = []
+        #extracted_links.each do |link, title|
+          #if @navigator.run(title) == :good
+            #good_links << link
+          #end
+        #end
+        #good_links
+        extracted_links
       end
 
       def extracted_data
@@ -89,7 +93,6 @@ module BayesSearcher
         links = @tree.css(hrefs).map { |l| l.get_attribute('href') }
         link_text = @tree.css(anchor_text).map { |t| t.content }
         Hash[links.zip(link_text)]
-        #Hash[@tree.css(hrefs).zip(@tree.css(anchor_text))]
       end
     end
 
@@ -111,7 +114,7 @@ module BayesSearcher
       when true
         self.train text
       else
-        self.classify
+        self.classify text
       end
     end
 
@@ -121,17 +124,22 @@ module BayesSearcher
 
     def train text
       #special user input mode here yo
-      puts text
-      puts "Best guess: #{self.classify text}"
-      puts "Classify as (good/bad): "
-      answer = gets.chomp.to_sym
-      #refactor
-      if answer == :w
-        @train = false
+      # refactor yo
+      unless text.empty?
+        puts text
+        puts "Best guess: #{self.classify text}"
+        puts "Classify as (good/bad): "
+        answer = gets.chomp.to_sym
+        #refactor
+        if answer == :w
+          @train = false
+        else
+          @klassifier.train answer, text
+        end
+        answer
       else
-        @klassifier.train answer, text
+        :bad
       end
-      answer
     end
   end
 end
