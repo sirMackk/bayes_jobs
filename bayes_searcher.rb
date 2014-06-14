@@ -1,13 +1,17 @@
 module BayesSearcher
   class Krawler
-    attr_reader :data
+    attr_reader :data, :kollector, :klassifiers
     require 'open-uri'
-    def initialize url, collector
-      @visited = []
+    require 'set'
+    def initialize url, kollector, klassifiers
+      @visited = Set.new
+      #@visited = []
       @links = Queue.new
       @data = []
       @url = url
-      @collector = collector
+      @collector = kollector
+      @klassifiers = klassifiers
+      @mutex = Mutex.new
     end
 
     def kollector_collect(page)
@@ -16,7 +20,9 @@ module BayesSearcher
 
     def collect_links(links_titles)
       links_titles.each do |link, title|
-        if !@visited.include?(link) || @collector.navigator.run(title) == :good
+        if (!@visited.include?(link) || 
+            @klassifiers.navigator.run(title) == :good)
+          @visited << link
           @links << link
         end
       end
@@ -26,8 +32,11 @@ module BayesSearcher
       open(link) do |page|
         data, links_titles = kollector_collect(page)
         @data << data
-        collect_links(links_titles)
-        @visited << link
+        @mutex.synchronize do
+          collect_links(links_titles)
+          @visited.add(link)
+          #@visited << link
+        end
       end
     end
 
@@ -48,52 +57,35 @@ module BayesSearcher
   end
 
     class Kollector
-      attr_accessor :extractor, :navigator
       require 'nokogiri'
-      def initialize klassifiers, **args
+      def initialize(**args)
         @css_selectors = args[:selectors]
-        @extractor = klassifiers[:extractor]
-        @navigator = klassifiers[:navigator]
       end
 
-      def kollect page
+      def kollect(page)
         @tree = Nokogiri::HTML(page)
         return data, links
       end
 
-      def save
-        puts 'saving...'
-        @extractor.klassifier.save_state
-        @navigator.klassifier.save_state
-      end
-        
       #get rid of
       def data
         :bob 
       end
 
       def links
-        #good_links = []
-        #extracted_links.each do |link, title|
-          #if @navigator.run(title) == :good
-            #good_links << link
-          #end
-        #end
-        #good_links
-        extracted_links
-      end
-
-      def extracted_data
-      end
-
-      def extracted_links
-        #refactor
-        hrefs = @css_selectors[:links]
-        anchor_text = @css_selectors[:link_text]
-        links = @tree.css(hrefs).map { |l| l.get_attribute('href') }
-        link_text = @tree.css(anchor_text).map { |t| t.content }
+        links = @tree.css(link_extractor).map { |l| l.get_attribute('href') }
+        link_text = @tree.css(link_text_extractor).map { |t| t.content }
         Hash[links.zip(link_text)]
       end
+
+      def link_extractor
+        @css_selectors[:links]
+      end
+
+      def link_text_extractor
+        @css_selectors[:link_text]
+      end
+
     end
 
   class Klassifier
@@ -103,27 +95,31 @@ module BayesSearcher
     extend Forwardable
     def_delegators :@klassifier, :classify
 
-    def initialize title, train: false, **opts
+
+    def initialize(title, train: false, **opts)
       @train = train
-      storage = StuffClassifier::FileStorage.new(slugify(title))
+      storage = opts[:storage] || Klassifier.get_or_create_storage(title)
       @klassifier = StuffClassifier::Bayes.new(title, storage: storage)
     end
 
-    def run text
+    def run(text)
       case @train
       when true
-        self.train text
+        self.train(text)
       else
-        self.classify text
+        self.classify(text)
       end
     end
 
-    def slugify param
+    def self.get_or_create_storage(title: 'test')
+      StuffClassifier::FileStorage.new(Klassifier.slugify(title))
+    end
+
+    def self.slugify(param)
       param.downcase.strip.gsub(' ', '-').gsub(/[^\w-]/, '')
     end
 
     def train text
-      #special user input mode here yo
       # refactor yo
       unless text.empty?
         puts text
