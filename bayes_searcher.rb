@@ -5,7 +5,6 @@ module BayesSearcher
     require 'set'
     def initialize url, kollector, klassifiers
       @visited = Set.new
-      #@visited = []
       @links = Queue.new
       @data = []
       @url = url
@@ -20,8 +19,12 @@ module BayesSearcher
 
     def collect_links(links_titles)
       links_titles.each do |link, title|
-        if (!@visited.include?(link) || 
+        puts title
+        puts !@visited.include?(link)
+        puts @klassifiers.navigator.run(title)
+        if (!@visited.include?(link) && 
             @klassifiers.navigator.run(title) == :good)
+          puts "collecting link: #{link}"
           @visited << link
           @links << link
         end
@@ -35,7 +38,6 @@ module BayesSearcher
         @mutex.synchronize do
           collect_links(links_titles)
           @visited.add(link)
-          #@visited << link
         end
       end
     end
@@ -46,9 +48,12 @@ module BayesSearcher
 
       2.times do
         threads << Thread.new do
-          while !@links.empty? && @links.size < 80
+          while !@links.empty? #&& @links.size < 80
             link = @links.pop
             parse_page(link)
+            if @links.size % 100 == 0
+              @klassifiers.navigator.save_state
+            end
           end
         end
       end
@@ -93,7 +98,7 @@ module BayesSearcher
     require 'forwardable'
     attr_accessor :klassifier 
     extend Forwardable
-    def_delegators :@klassifier, :classify
+    def_delegators :@klassifier, :classify, :save_state
 
 
     def initialize(title, train: false, **opts)
@@ -103,11 +108,20 @@ module BayesSearcher
     end
 
     def run(text)
-      case @train
-      when true
-        self.train(text)
+      unless text.empty?
+        case @train
+        when true
+          self.train(text)
+        else
+          self.classify(text)
+        end
       else
-        self.classify(text)
+        puts "EMPTY"
+        if Random.rand >= 0.5
+          :good
+        else
+          :bad
+        end
       end
     end
 
@@ -130,7 +144,7 @@ module BayesSearcher
         if answer == :w
           @train = false
         else
-          @klassifier.train answer, text
+          @klassifier.train(answer, text)
         end
         answer
       else
