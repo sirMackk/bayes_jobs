@@ -17,27 +17,41 @@ module BayesSearcher
       @collector.kollect(page.read)
     end
 
-    def collect_links(links_titles)
+    def collect_info(links_titles, klassifier)
+      # this needs some serious attention
+      # look at the duplication
       links_titles.each do |link, title|
         puts title
         puts !@visited.include?(link)
-        puts @klassifiers.navigator.run(title)
-        if (!@visited.include?(link) && 
-            @klassifiers.navigator.run(title) == :good)
-          puts "collecting link: #{link}"
-          @visited << link
-          @links << link
+        puts @klassifiers[klassifier].run(title)
+        case klassifier
+        when :navigator
+          if (!@visited.include?(link) && 
+              @klassifiers[klassifier].run(title) == :good)
+            puts "collecting link: #{link}"
+            @visited << link
+            @links << link
+          end
+        when :extractor
+          puts 'extracting'
+          if (!@data.include?(link) && 
+              @klassifiers[klassifier].run(title) == :good)
+            puts "collecting link: #{link}"
+            @data << link
+          end
         end
       end
     end
+
 
     def parse_page(link)
       open(link) do |page|
         data, links_titles = kollector_collect(page)
         @data << data
         @mutex.synchronize do
-          collect_links(links_titles)
+          collect_info(links_titles, :navigator)
           @visited.add(link)
+          collect_info(data, :extractor)
         end
       end
     end
@@ -74,7 +88,9 @@ module BayesSearcher
 
       #get rid of
       def data
-        :bob 
+        job_titles = @tree.css(title_extractor).map { |t| t.content }
+        company_links = @tree.css(company_link_extractor).map { |l| l.get_attribute('href') }
+        Hash[company_links.zip(job_titles)]
       end
 
       def links
@@ -91,6 +107,13 @@ module BayesSearcher
         @css_selectors[:link_text]
       end
 
+      def title_extractor
+        @css_selectors[:title]
+      end
+
+      def company_link_extractor
+        @css_selectors[:company_page]
+      end
     end
 
   class Klassifier
