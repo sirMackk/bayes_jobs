@@ -3,6 +3,8 @@ module BayesSearcher
     attr_reader :data, :kollector, :klassifiers
     require 'open-uri'
     require 'set'
+    require 'yaml'
+
     def initialize url, kollector, klassifiers
       @visited = Set.new
       @links = Queue.new
@@ -24,20 +26,23 @@ module BayesSearcher
         puts title
         puts !@visited.include?(link)
         puts @klassifiers[klassifier].run(title)
-        case klassifier
-        when :navigator
-          if (!@visited.include?(link) && 
-              @klassifiers[klassifier].run(title) == :good)
+        if (!@visited.include?(link) && 
+            @klassifiers[klassifier].run(title) == :good)
+          case klassifier
+          when :navigator
             puts "collecting link: #{link}"
             @visited << link
             @links << link
-          end
-        when :extractor
-          puts 'extracting'
-          if (!@data.include?(link) && 
-              @klassifiers[klassifier].run(title) == :good)
-            puts "collecting link: #{link}"
+          else
+            puts 'collecting data'
+            debugger
             @data << link
+            if @data.size > 25
+              File.open('temp2', 'wb') do |f|
+                f.write(@data.to_yaml)
+                @data = []
+              end
+            end
           end
         end
       end
@@ -71,6 +76,7 @@ module BayesSearcher
           end
         end
       end
+      puts 'crawler is done'
       threads.each { |t| t.join }
     end
   end
@@ -83,21 +89,28 @@ module BayesSearcher
 
       def kollect(page)
         @tree = Nokogiri::HTML(page)
-        return data, links
+        return extract(title_extractor, company_link_extractor), extract(link_text_extractor, link_extractor)
       end
 
-      #get rid of
-      def data
-        job_titles = @tree.css(title_extractor).map { |t| t.content }
-        company_links = @tree.css(company_link_extractor).map { |l| l.get_attribute('href') }
+      private
+
+      def extract(link_ext, text_ext)
+        job_titles = @tree.css(text_ext).map { |t| t.content }
+        company_links = @tree.css(link_ext).map { |l| l.get_attribute('href') }
         Hash[company_links.zip(job_titles)]
       end
 
-      def links
-        links = @tree.css(link_extractor).map { |l| l.get_attribute('href') }
-        link_text = @tree.css(link_text_extractor).map { |t| t.content }
-        Hash[links.zip(link_text)]
-      end
+      #def data
+        #job_titles = @tree.css(title_extractor).map { |t| t.content }
+        #company_links = @tree.css(company_link_extractor).map { |l| l.get_attribute('href') }
+        #Hash[company_links.zip(job_titles)]
+      #end
+
+      #def links
+        #links = @tree.css(link_extractor).map { |l| l.get_attribute('href') }
+        #link_text = @tree.css(link_text_extractor).map { |t| t.content }
+        #Hash[links.zip(link_text)]
+      #end
 
       def link_extractor
         @css_selectors[:links]
@@ -126,20 +139,17 @@ module BayesSearcher
 
     def initialize(title, train: false, **opts)
       @train = train
-      storage = opts[:storage] || Klassifier.get_or_create_storage(title)
-      @klassifier = StuffClassifier::Bayes.new(title, storage: storage)
+      @klassifier = StuffClassifier::Bayes.new(title, storage: opts[:storage])
     end
 
     def run(text)
       unless text.empty?
-        case @train
-        when true
+        if @train
           self.train(text)
         else
           self.classify(text)
         end
       else
-        puts "EMPTY"
         if Random.rand >= 0.5
           :good
         else
@@ -156,20 +166,26 @@ module BayesSearcher
       param.downcase.strip.gsub(' ', '-').gsub(/[^\w-]/, '')
     end
 
-    def train text
-      # refactor yo
+    def get_user_input
+      gets.chomp.to_sym
+    end
+
+    def human_train(text)
+      puts text
+      puts "Best guess: #{self.classify text}"
+      puts "Classify as (good/bad): "
+      answer = get_user_input
+      if answer == :w
+        @train = false
+      else
+        @klassifier.train(answer, text)
+      end
+      answer
+    end
+
+    def train(text)
       unless text.empty?
-        puts text
-        puts "Best guess: #{self.classify text}"
-        puts "Classify as (good/bad): "
-        answer = gets.chomp.to_sym
-        #refactor
-        if answer == :w
-          @train = false
-        else
-          @klassifier.train(answer, text)
-        end
-        answer
+        human_train(text)
       else
         :bad
       end

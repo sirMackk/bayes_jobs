@@ -18,6 +18,12 @@
             fixed
         </comment>
     </note>
+    <note priority="high" time="1402603813" done="1403124082">
+        write minitest tests
+        <comment>
+            Working on it
+        </comment>
+    </note>
     <note priority="medium" time="1402603768" done="1402773968">
         double check if not visiting the same links twice
         <comment>
@@ -27,16 +33,10 @@
     <note priority="veryhigh" time="1402777547">
         Add information klassifier and extractor
     </note>
-    <note priority="high" time="1402603813">
-        write minitest tests
-    </note>
     <note priority="high" time="1402608532">
         Add words to ignore to classifiers
     </note>
     <note priority="medium" time="1402603791">
         fix end api - arguments and css selector input
-    </note>
-    <note priority="medium" time="1402603805">
-        refactor bad parts of code
     </note>
 </todo>
