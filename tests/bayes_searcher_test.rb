@@ -16,7 +16,16 @@ class TestKollector < MiniTest::Test
     @kollector.kollect(@page)
   end
 
-  #test extract method
+  def test_extract
+    tree = mock
+    item = mock
+    item.expects(:content).returns(1)
+    item.expects(:get_attribute).returns(1)
+    tree.expects(:css).with(instance_of(String)).returns([item]).at_least(2)
+    @kollector.instance_variable_set(:@tree, tree)
+    result = @kollector.extract('link', 'text')
+    assert_instance_of(Hash, result)
+  end
 end
 
 class TestKlassifier < MiniTest::Test

@@ -81,53 +81,41 @@ module BayesSearcher
     end
   end
 
-    class Kollector
-      require 'nokogiri'
-      def initialize(**args)
-        @css_selectors = args[:selectors]
-      end
-
-      def kollect(page)
-        @tree = Nokogiri::HTML(page)
-        return extract(title_extractor, company_link_extractor), extract(link_text_extractor, link_extractor)
-      end
-
-      private
-
-      def extract(link_ext, text_ext)
-        job_titles = @tree.css(text_ext).map { |t| t.content }
-        company_links = @tree.css(link_ext).map { |l| l.get_attribute('href') }
-        Hash[company_links.zip(job_titles)]
-      end
-
-      #def data
-        #job_titles = @tree.css(title_extractor).map { |t| t.content }
-        #company_links = @tree.css(company_link_extractor).map { |l| l.get_attribute('href') }
-        #Hash[company_links.zip(job_titles)]
-      #end
-
-      #def links
-        #links = @tree.css(link_extractor).map { |l| l.get_attribute('href') }
-        #link_text = @tree.css(link_text_extractor).map { |t| t.content }
-        #Hash[links.zip(link_text)]
-      #end
-
-      def link_extractor
-        @css_selectors[:links]
-      end
-
-      def link_text_extractor
-        @css_selectors[:link_text]
-      end
-
-      def title_extractor
-        @css_selectors[:title]
-      end
-
-      def company_link_extractor
-        @css_selectors[:company_page]
-      end
+  class Kollector
+    require 'nokogiri'
+    def initialize(**args)
+      @css_selectors = args[:selectors]
     end
+
+    def kollect(page)
+      @tree = Nokogiri::HTML(page)
+      return extract(title_extractor, company_link_extractor), extract(link_text_extractor, link_extractor)
+    end
+
+    def extract(link_ext, text_ext)
+      job_titles = @tree.css(text_ext).map { |t| t.content }
+      company_links = @tree.css(link_ext).map { |l| l.get_attribute('href') }
+      Hash[company_links.zip(job_titles)]
+    end
+
+    private
+
+    def link_extractor
+      @css_selectors[:links]
+    end
+
+    def link_text_extractor
+      @css_selectors[:link_text]
+    end
+
+    def title_extractor
+      @css_selectors[:title]
+    end
+
+    def company_link_extractor
+      @css_selectors[:company_page]
+    end
+  end
 
   class Klassifier
     require 'stuff-classifier'
