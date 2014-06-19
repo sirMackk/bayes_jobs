@@ -2,6 +2,29 @@ require 'minitest/autorun'
 require 'mocha/mini_test'
 require_relative '../bayes_searcher'
 
+class TestKrawler < MiniTest::Test
+  def setup
+    kollector = mock
+    klassifiers = mock
+    @krawler = BayesSearcher::Krawler.new('url', kollector, klassifiers)
+  end
+
+  def test_kollector_collect
+    page = mock
+    page.expects(:read).returns(nil)
+    @krawler.kollector.expects(:kollect)
+    @krawler.kollector_collect(page)
+  end
+
+  def test_parse_page
+    @krawler.expects(:open).yields(mock('page'))
+    @krawler.expects(:kollector_collect).returns([0, 1])
+    @krawler.expects(:collect_info).at_least(2)
+    @krawler.parse_page('link')
+  end
+
+end
+
 class TestKollector < MiniTest::Test
   def setup
     @selectors = {selectors: {links: '.links', link_text: '.link_text',

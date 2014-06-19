@@ -5,49 +5,35 @@ module BayesSearcher
     require 'set'
     require 'yaml'
 
-    def initialize url, kollector, klassifiers
+    def initialize(url, kollector, klassifiers)
       @visited = Set.new
       @links = Queue.new
       @data = []
       @url = url
-      @collector = kollector
+      @kollector = kollector
       @klassifiers = klassifiers
       @mutex = Mutex.new
     end
 
-    def kollector_collect(page)
-      @collector.kollect(page.read)
-    end
+    def run
+      parse_page(@url)
+      threads = []
 
-    def collect_info(links_titles, klassifier)
-      # this needs some serious attention
-      # look at the duplication
-      links_titles.each do |link, title|
-        puts title
-        puts !@visited.include?(link)
-        puts @klassifiers[klassifier].run(title)
-        if (!@visited.include?(link) && 
-            @klassifiers[klassifier].run(title) == :good)
-          case klassifier
-          when :navigator
-            puts "collecting link: #{link}"
-            @visited << link
-            @links << link
-          else
-            puts 'collecting data'
-            debugger
-            @data << link
-            if @data.size > 25
-              File.open('temp2', 'wb') do |f|
-                f.write(@data.to_yaml)
-                @data = []
-              end
-            end
+      2.times do
+        threads << Thread.new do
+          while !@links.empty? #&& @links.size < 80
+            link = @links.pop
+            parse_page(link)
+            save_navigator
           end
         end
       end
+      threads.each { |t| t.join }
     end
 
+    def kollector_collect(page)
+      @kollector.kollect(page.read)
+    end
 
     def parse_page(link)
       open(link) do |page|
@@ -61,23 +47,47 @@ module BayesSearcher
       end
     end
 
-    def run
-      parse_page(@url)
-      threads = []
+    private
 
-      2.times do
-        threads << Thread.new do
-          while !@links.empty? #&& @links.size < 80
-            link = @links.pop
-            parse_page(link)
-            if @links.size % 100 == 0
-              @klassifiers.navigator.save_state
-            end
+    def save_navigator
+      if @links.size % 100 == 0
+        @klassifiers.navigator.save_state
+      end
+    end
+
+    def collect_info(links_titles, klassifier)
+      links_titles.each do |link, title|
+        # debug msgs
+        puts title
+        puts !@visited.include?(link)
+        puts @klassifiers[klassifier].run(title)
+        if (!@visited.include?(link) && 
+            @klassifiers[klassifier].run(title) == :good)
+          case klassifier
+          when :navigator
+            collect_navigation_links(link)
+          else
+            collect_and_save_data(link)
           end
         end
       end
-      puts 'crawler is done'
-      threads.each { |t| t.join }
+    end
+
+    def collect_navigation_links(link)
+      puts "collecting link: #{link}"
+      @visited << link
+      @links << link
+    end
+
+    def collect_and_save_data(link)
+      puts 'collecting data'
+      @data << link
+      if @data.size > 25
+        File.open('temp2', 'wb') do |f|
+          f.write(@data.to_yaml)
+          @data = []
+        end
+      end
     end
   end
 
