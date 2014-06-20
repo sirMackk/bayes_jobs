@@ -21,7 +21,7 @@ module BayesSearcher
 
       2.times do
         threads << Thread.new do
-          while !@links.empty? #&& @links.size < 80
+          while !@links.empty?
             link = @links.pop
             parse_page(link)
             save_navigator
@@ -38,7 +38,7 @@ module BayesSearcher
     def parse_page(link)
       open(link) do |page|
         data, links_titles = kollector_collect(page)
-        @data << data
+        #@data << data
         @mutex.synchronize do
           collect_info(links_titles, :navigator)
           @visited.add(link)
@@ -58,9 +58,11 @@ module BayesSearcher
     def collect_info(links_titles, klassifier)
       links_titles.each do |link, title|
         # debug msgs
-        puts title
-        puts !@visited.include?(link)
-        puts @klassifiers[klassifier].run(title)
+        if klassifier == :navigator
+          puts title
+          puts !@visited.include?(link)
+          puts @klassifiers[klassifier].run(title)
+        end
         if (!@visited.include?(link) && 
             @klassifiers[klassifier].run(title) == :good)
           case klassifier
@@ -82,8 +84,8 @@ module BayesSearcher
     def collect_and_save_data(link)
       puts 'collecting data'
       @data << link
-      if @data.size > 25
-        File.open('temp2', 'wb') do |f|
+      if @data.size > 50
+        File.open("temp#{Time.now.to_i}", 'wb') do |f|
           f.write(@data.to_yaml)
           @data = []
         end
@@ -102,7 +104,7 @@ module BayesSearcher
       return extract(title_extractor, company_link_extractor), extract(link_text_extractor, link_extractor)
     end
 
-    def extract(link_ext, text_ext)
+    def extract(text_ext, link_ext)
       job_titles = @tree.css(text_ext).map { |t| t.content }
       company_links = @tree.css(link_ext).map { |l| l.get_attribute('href') }
       Hash[company_links.zip(job_titles)]
@@ -178,7 +180,7 @@ module BayesSearcher
       else
         @klassifier.train(answer, text)
       end
-      answer
+      answer.to_sym
     end
 
     def train(text)
