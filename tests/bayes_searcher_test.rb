@@ -6,7 +6,7 @@ class TestKrawler < MiniTest::Test
   def setup
     kollector = mock
     klassifiers = mock
-    @krawler = BayesSearcher::Krawler.new('url', kollector, klassifiers)
+    @krawler = BayesSearcher::Krawler.new('url', kollector, klassifiers, testing: true)
   end
 
   def test_kollector_collect
@@ -43,11 +43,13 @@ class TestKollector < MiniTest::Test
     tree = mock
     item = mock
     item.expects(:content).returns(1)
-    item.expects(:get_attribute).returns(1)
-    tree.expects(:css).with(instance_of(String)).returns([item]).at_least(2)
+    item.expects(:get_attribute).with('href').returns('link')
+    tree.expects(:css).with('text').returns([item])
+    tree.expects(:css).with('link').returns([item])
     @kollector.instance_variable_set(:@tree, tree)
+
     result = @kollector.extract('link', 'text')
-    assert_instance_of(Hash, result)
+    assert_equal({'link' => 1}, result)
   end
 end
 

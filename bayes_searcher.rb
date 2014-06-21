@@ -4,24 +4,42 @@ module BayesSearcher
     require 'open-uri'
     require 'set'
     require 'yaml'
+    require 'sqlite3'
 
-    def initialize(url, kollector, klassifiers)
+    def initialize(url, kollector, klassifiers, **opts)
+      @opts = opts
       @visited = Set.new
       @links = Queue.new
-      @data = []
       @url = url
       @kollector = kollector
       @klassifiers = klassifiers
       @mutex = Mutex.new
+      init_db
+    end
+
+    def init_db
+      if @opts[:testing] == true
+        @db = SQLite3::Database.open(':memory:')
+      else
+        @db = SQLite3::Database.open('results.db')
+      end
+      ObjectSpace.define_finalizer(self, proc { @db.close if @db; puts 'DB closed'; })
+      @db.execute('CREATE TABLE IF NOT EXISTS linkedin_links(link text unique, extra text)')
+    end
+
+    def close_db
+      @db.close if @db
     end
 
     def run
+      keep_running = true
       parse_page(@url)
       threads = []
 
-      2.times do
+      1.times do
         threads << Thread.new do
-          while !@links.empty?
+          while !@links.empty? && keep_running
+            trap('INT') { keep_running = false }
             link = @links.pop
             parse_page(link)
             save_navigator
@@ -38,7 +56,6 @@ module BayesSearcher
     def parse_page(link)
       open(link) do |page|
         data, links_titles = kollector_collect(page)
-        #@data << data
         @mutex.synchronize do
           collect_info(links_titles, :navigator)
           @visited.add(link)
@@ -57,19 +74,13 @@ module BayesSearcher
 
     def collect_info(links_titles, klassifier)
       links_titles.each do |link, title|
-        # debug msgs
-        if klassifier == :navigator
-          puts title
-          puts !@visited.include?(link)
-          puts @klassifiers[klassifier].run(title)
-        end
         if (!@visited.include?(link) && 
             @klassifiers[klassifier].run(title) == :good)
           case klassifier
           when :navigator
             collect_navigation_links(link)
           else
-            collect_and_save_data(link)
+            collect_and_save_data([link, title])
           end
         end
       end
@@ -81,14 +92,15 @@ module BayesSearcher
       @links << link
     end
 
-    def collect_and_save_data(link)
+    def collect_and_save_data(data)
       puts 'collecting data'
-      @data << link
-      if @data.size > 50
-        File.open("temp#{Time.now.to_i}", 'wb') do |f|
-          f.write(@data.to_yaml)
-          @data = []
-        end
+      begin
+        stm = @db.prepare("INSERT INTO linkedin_links(link, extra) VALUES(?, ?)")
+        stm.bind_params(data.first, data.last)
+        stm.execute
+      rescue SQLite3::ConstraintException
+      ensure
+        stm.close if stm
       end
     end
   end

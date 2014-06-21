@@ -7,4 +7,5 @@ group :development do
   gem 'guard'
   gem 'guard-minitest'
   gem 'mocha'
+  gem 'open_uri_redirections'
 end
